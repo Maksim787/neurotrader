@@ -99,27 +99,27 @@ class StreamLatencyLogger:
     For managing stream message time differences and strategy latency
     """
 
-    def __init__(self, stream_name: str, logger: logging.Logger):
+    def __init__(self, stream_name: str, logger: logging.Logger) -> None:
         self._stream_name = stream_name
         self._logger = logger
         self._start_time: datetime.datetime | None = None
         self._subscribe_time: datetime.datetime | None = None
         self._last_message_time: datetime.datetime | None = None
 
-    def on_start_listening(self):
+    def on_start_listening(self) -> None:
         """
         Is called before receiving messages from streams
         """
         self._start_time = utc_now()
 
-    def on_success_subscribe(self):
+    def on_success_subscribe(self) -> None:
         assert self._start_time is not None
         assert self._subscribe_time is None, 'Got two subscription info messages'
         self._subscribe_time = utc_now()
         self._last_message_time = self._subscribe_time
         self._logger.info(f'{self._stream_name} subscribe time diff: {self._diff_ms(self._start_time, self._subscribe_time):.2f}ms')
 
-    def on_recv_message(self, exchange_time_utc: datetime.datetime):
+    def on_recv_message(self, exchange_time_utc: datetime.datetime) -> None:
         """
         Is called after constructing event from stream, before strategy is called
         """
@@ -129,14 +129,14 @@ class StreamLatencyLogger:
         self._logger.debug(f'{self._stream_name} difference between message recv and exchange time: {self._diff_ms(exchange_time_utc, curr_time):.2f}ms')
         self._last_message_time = curr_time
 
-    def on_strategy_done(self):
+    def on_strategy_done(self) -> None:
         """
         Is called after strategy has processed event
         """
         curr_time = utc_now()
         self._logger.debug(f'{self._stream_name} strategy callback time diff: {self._diff_ms(self._last_message_time, curr_time):.3f}ms')
 
-    def is_ready(self):
+    def is_ready(self) -> bool:
         """
         Return True <=> on_success_subscribe() is called
         """
@@ -170,7 +170,7 @@ class MarketManager:
     # Methods for Strategy
     ####################################################################################################
 
-    def subscribe_order_book(self, instruments: list[InstrumentInfo], depth: int):
+    def subscribe_order_book(self, instruments: list[InstrumentInfo], depth: int) -> None:
         """
         Subscribe for order_book with given depth (1, 10, 20, 30, 40, 50)
         """
@@ -184,7 +184,7 @@ class MarketManager:
         for instrument in instruments:
             self._on_stream_creation(f'order_book_{depth}_depth_{instrument.figi}')
 
-    def subscribe_trades(self, instruments: list[InstrumentInfo]):
+    def subscribe_trades(self, instruments: list[InstrumentInfo]) -> None:
         """
         Subscribe for last trades for given instruments
         Also download all last hour trades for the instrument
@@ -198,7 +198,7 @@ class MarketManager:
         for instrument in instruments:
             self._on_stream_creation(f'trades_{instrument.figi}')
 
-    def subscribe_last_prices(self, instruments: list[InstrumentInfo]):
+    def subscribe_last_prices(self, instruments: list[InstrumentInfo]) -> None:
         """
         Subscribe for last prices for given instruments
         """
@@ -257,6 +257,9 @@ class MarketManager:
         self._logger.info('START RUN')
         for latency_logger in self._latency_loggers.values():
             latency_logger.on_start_listening()  # start listening streams
+        if self._check_readiness():
+            # in case there are no streams
+            return
         async for market_data in self._market_data_stream:
             market_data: inv.MarketDataResponse
             self._logger.debug(f'Got from stream: {market_data}')
@@ -461,7 +464,7 @@ class MarketManager:
         self._is_stream_ready[stream_name] = True
         self._check_readiness()  # notify runner if all subscriptions are done
 
-    def _check_readiness(self):
+    def _check_readiness(self) -> bool:
         """
         Check readiness of all subscriptions and history market data
         Tell Runner about readiness if needed
@@ -469,3 +472,5 @@ class MarketManager:
         all_subscriptions_are_ready = all(latency_logger.is_ready() for latency_logger in self._latency_loggers.values())
         if all_subscriptions_are_ready:
             self._rn.on_market_manager_ready()
+            return True
+        return False

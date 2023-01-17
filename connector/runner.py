@@ -1,10 +1,12 @@
 import asyncio
+import datetime
 
 import tinkoff.invest as inv
 from tinkoff.invest.async_services import AsyncServices
 from connector.market.market_manager import MarketManager
 from connector.user.user_manager import UserManager
 from connector.info.info_manager import InfoManager
+from connector.strategy import Strategy
 from connector.common.log import Logging
 
 
@@ -14,14 +16,18 @@ class Runner:
     Can only be used via 'async with'
     """
 
-    def __init__(self, token: str):
+    def __init__(self, token: str, account_id: str | None = None) -> None:
         self._logger = Logging.get_logger('Runner')
+        self._account_id = account_id
 
         self._mm = MarketManager()
         self._um = UserManager()
         self._im = InfoManager()
+        self._strategy: Strategy | None = None
         self._client = inv.AsyncClient(token)
         self._services: AsyncServices | None = None
+
+        self._strategy_intervals_callbacks: list[datetime.timedelta] = []
 
         self._mm_ready = False
         self._um_ready = False
@@ -45,9 +51,10 @@ class Runner:
         Start Managers and strategy, enter infinite loop
         """
         assert self._services is not None, 'Runner must be invoked using "async with"'
+        self._strategy = strategy
 
         # connect strategy with managers
-        strategy.set_helpers(self._mm, self._um, self._im)
+        strategy.set_helpers(self._mm, self._um, self._im, self)
 
         # assign services
         self._um.set_services(self._services)
@@ -70,19 +77,17 @@ class Runner:
         strategy.subscribe()
         # TODO: mm and um subscription processing
 
-        # history data is downloaded, all streams are open, call 'on_start'
-        self._logger.info('Call strategy.on_start()')
-        strategy.on_start()
-
         # run loops of MarketManager and UserManager
         self._logger.info('Start Managers')
-        await asyncio.gather(self._mm.run(), self._um.run())
+        await asyncio.gather(self._mm.run(),
+                             self._um.run(),
+                             *[self._interval_notifier(interval) for interval in self._strategy_intervals_callbacks])
 
     ####################################################################################################
     # Methods for Managers
     ####################################################################################################
 
-    def on_market_manager_ready(self):
+    def on_market_manager_ready(self) -> None:
         """
         Is called when all history data is downloaded and streams are active
         """
@@ -90,7 +95,7 @@ class Runner:
         self._logger.info('MarketManager is ready')
         self._start_strategy()
 
-    def on_user_manager_ready(self):
+    def on_user_manager_ready(self) -> None:
         """
         Is called when UserManager is ready to work
         """
@@ -98,14 +103,44 @@ class Runner:
         self._logger.info('UserManager is ready')
         self._start_strategy()
 
+    def get_account_id(self) -> str | None:
+        return self._account_id
+
+    ####################################################################################################
+    # Methods for Strategy
+    ####################################################################################################
+
+    def subscribe_interval(self, interval: datetime.timedelta) -> None:
+        """
+        Subscribe for invoking strategy callback once per interval
+        """
+        self._strategy_intervals_callbacks.append(interval)
+
     ####################################################################################################
     # Private Methods
     ####################################################################################################
 
-    def _start_strategy(self):
+    def _is_ready(self) -> bool:
+        return self._mm_ready and self._um_ready
+
+    def _start_strategy(self) -> None:
         """
         Start calling strategy callbacks from MarketManager if both Managers are ready
         """
-        if self._mm_ready and self._um_ready:
+        if self._is_ready():
+            # history data is downloaded, all streams are open, call 'on_start'
             self._logger.info('Both managers are ready: start strategy')
-            self._mm.start_strategy()
+            self._strategy.on_start()  # callback
+            self._mm.start_strategy()  # start notifying strategy about market events
+
+    async def _interval_notifier(self, interval: datetime.timedelta):
+        """
+        Notify strategy once per interval
+        """
+        # wait for managers' readiness
+        while not self._is_ready():
+            await asyncio.sleep(0.3)
+        # notify
+        while True:
+            self._strategy.on_interval(interval)
+            await asyncio.sleep(interval.total_seconds())

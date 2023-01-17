@@ -32,10 +32,13 @@ class Logging:
     levels = [DEBUG, INFO, WARNING, ERROR, CRITICAL]
 
     # common formatter
-    formatter = logging.Formatter(
+    common_formatter = logging.Formatter(
         fmt='[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(name)s] {%(module)s} - %(funcName)s(): %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+
+    # common handler
+    common_handler: logging.FileHandler | None = None
 
     # LoggerInfo by logger name
     loggers: dict[str, LoggerInfo] = {}
@@ -75,13 +78,22 @@ class Logging:
         if not log_directory.exists():
             log_directory.mkdir(exist_ok=True)
 
+        # create common handler
+        if cls.common_handler is None:
+            cls.common_handler = logging.FileHandler(
+                filename=log_directory / f"All.log",
+                mode="w",
+                encoding="utf-8"
+            )
+            cls.common_handler.setLevel(cls.DEBUG)
+
         # create LoggerInfo
         cls.loggers[name] = LoggerInfo(name=name)
         logger_info = cls.loggers[name]
 
         # stdout handler
         stdout_handler = logging.StreamHandler()
-        stdout_handler.setFormatter(cls.formatter)
+        stdout_handler.setFormatter(cls.common_formatter)
         stdout_handler.setLevel(logger_info.stdout_log_level or cls.DEBUG)
         logger_info.stdout_log_level = stdout_handler.level
         logger_info.stdout_handler = stdout_handler
@@ -92,7 +104,7 @@ class Logging:
             mode="w",
             encoding="utf-8"
         )
-        file_handler.setFormatter(cls.formatter)
+        file_handler.setFormatter(cls.common_formatter)
         file_handler.setLevel(logger_info.file_log_level or cls.DEBUG)
         logger_info.file_log_level = file_handler.level
         logger_info.file_handler = file_handler
@@ -104,6 +116,7 @@ class Logging:
         )
         logger.addHandler(stdout_handler)
         logger.addHandler(file_handler)
+        logger.addHandler(cls.common_handler)
         logger_info.logger = logger
         logger_info.check_correctness()  # Sanity check
         return logger_info
