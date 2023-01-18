@@ -26,15 +26,15 @@ class MyStrategy(Strategy):
         # self.mm.subscribe_last_prices([self.instrument])
         # self.mm.subscribe_candles([self.instrument], interval=CandleInterval.MIN_1)
         self.rn.subscribe_interval(datetime.timedelta(seconds=5))
-        # self.um.new_order(
-        #     NewOrder(
-        #         instrument=self.instrument,
-        #         order_type=OrderType.MARKET,
-        #         direction=OrderDirection.SELL,
-        #         quantity=1,
-        #         price=None
-        #     )
-        # )
+        self.um.new_order(
+            NewOrder(
+                instrument=self.instrument,
+                order_type=OrderType.LIMIT,
+                direction=OrderDirection.BUY,
+                quantity=1,
+                price=4.0
+            )
+        )
 
     def on_start(self) -> None:
         self._logger.info('OnStart is called')

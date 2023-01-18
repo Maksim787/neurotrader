@@ -49,7 +49,9 @@ class CancelOrder:
 
 @dataclass
 class ModifyOrder:
-    pass
+    order_id: str
+    new_quantity: int  # number of lots
+    new_price: float  # per instrument (not per lot)
 
 
 Action = NewOrder | CancelOrder | ModifyOrder
@@ -73,11 +75,13 @@ class Positions:
 
 
 class OrderStatus(Enum):
-    PENDING = 0  # initial status
-    OPEN = 1  # only for limit orders
-    PART_FILL = 2  # only for limit orders
-    FILL = 3  # final status
-    CANCEL = 4  # only for limit orders
+    PENDING_OPEN = 0  # initial status
+    PENDING_CANCEL = 1
+    PENDING_MODIFY = 2
+    OPEN = 3
+    PART_FILL = 4
+    FILL = 5  # final status
+    CANCEL = 6  # final status
 
 
 @dataclass
@@ -132,6 +136,19 @@ class RateLimiter:
             wait_time = self.SECONDS_IN_MINUTE - (time.time() - self._queue[0])
             self._logger.warning(f'Rate limit exceeded for {self._method_name}: wait {wait_time}s')
             await asyncio.sleep(wait_time)
+
+    def get_optimal_time_between_requests(self) -> float:
+        """
+        Returns optimal time to wait between two requests in seconds
+        """
+        self._remove_irrelevant_requests()
+        if not self._queue:
+            return self.SECONDS_IN_MINUTE / self._limit_per_minute
+        remaining_time = self.SECONDS_IN_MINUTE - (time.time() - self._queue[0])
+        remaining_requests = self._limit_per_minute - len(self._queue)
+        optimal_wait_time = remaining_time / remaining_requests
+        self._logger.debug(f'{self._method_name}: {remaining_time=}, {remaining_requests=}, {optimal_wait_time=}')
+        return optimal_wait_time
 
     def _remove_irrelevant_requests(self) -> None:
         """
@@ -230,7 +247,7 @@ class UserManager:
 
         # order consumers loop
         consumers = [asyncio.create_task(self._order_consumer()) for _ in range(self.N_ORDER_CONSUMERS)]
-        await asyncio.gather(*consumers)
+        await asyncio.gather(*consumers, self._monitor_orders())
 
     ####################################################################################################
     # Private Methods for initial Positions retrieval
@@ -297,6 +314,27 @@ class UserManager:
         self._logger.info(f'tariff="{tariff.tariff}"; is_premium={tariff.prem_status}; is_qual={tariff.qual_status}; qualified_for_work_with={tariff.qualified_for_work_with}')
 
     ####################################################################################################
+    # Private Method for monitoring open orders
+    ####################################################################################################
+
+    async def _monitor_orders(self):
+        rate_limiter = self._rate_limiters['get_orders']
+        while True:
+            wait_time = rate_limiter.get_optimal_time_between_requests()
+            await asyncio.sleep(wait_time)
+            await rate_limiter.wait_until_available()
+            response = await self._services.orders.get_orders(account_id=self._account_id)
+            self._logger.debug(f'Got GetOrders response: {len(response.orders)} orders: {response}')
+            for order in response.orders:
+                self._process_get_order(order)
+            order_ids = {order.order_id for order in response.orders}
+            for order_id, user_order in self._orders.open_orders.items():
+                await rate_limiter.wait_until_available()
+                response = await self._services.orders.get_order_state(account_id=self._account_id, order_id=order_id)
+                assert response.order_id == order_id, 'Sanity check'
+                self._process_get_order(response)
+
+    ####################################################################################################
     # Private Method for handling rate limits
     ####################################################################################################
 
@@ -348,8 +386,9 @@ class UserManager:
             idempotency_key=idempotency_key,
             filled_quantity=0,
             price=order.price,
-            status=OrderStatus.PENDING
+            status=OrderStatus.PENDING_OPEN
         )
+        assert idempotency_key not in self._orders.pending_orders, 'Sanity check'
         self._orders.pending_orders[idempotency_key] = user_order
 
         # send order
@@ -367,7 +406,6 @@ class UserManager:
 
         # check response for errors
         self._logger.info(f'Got PostOrder response: {response}')
-        # assert order_id == response.order_id, 'Sanity check'
         assert order.instrument.figi == response.figi, 'Sanity check'
         if response.execution_report_status not in [inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_NEW,
                                                     inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_FILL,
@@ -408,13 +446,99 @@ class UserManager:
         """
         CancelOrder
         """
-        pass  # TODO:
+        assert order.order_id in self._orders.open_orders, 'Sanity check'
+        user_order = self._orders.open_orders[order.order_id]
+        user_order.status = OrderStatus.PENDING_CANCEL  # update order status
+        # open order -> pending order
+        self._orders.open_orders.pop(order.order_id)
+        self._orders.pending_orders[order.order_id] = user_order
+        await self._wait_until_available('cancel_order')
+        if order.order_id not in self._orders.open_orders:
+            self._logger.error(f'Order {order.order_id} was finished before cancel')
+            return
+        response = await self._services.orders.cancel_order()
+        # log response
+        self._logger.info(f'Got CancelOrder response: {response}')
+        # remove order from pending_orders
+        self._orders.open_orders.pop(order.order_id)
+        # add order to finished_orders
+        self._orders.finished_orders[order.order_id] = user_order
+        # update status
+        user_order.status = OrderStatus.CANCEL
+        # notify strategy
+        self._strategy.on_order_event(user_order)
 
     async def _process_modify_order(self, order: ModifyOrder) -> None:
         """
         ModifyOrder
         """
-        pass  # TODO:
+        assert order.order_id in self._orders.open_orders, 'Sanity check'
+        user_order = self._orders.open_orders[order.order_id]
+        user_order.status = OrderStatus.PENDING_MODIFY
+        # open order -> pending order
+        self._orders.open_orders.pop(order.order_id)
+        self._orders.pending_orders[order.order_id] = user_order
+        # TODO: check rate limits
+        await self._wait_until_available('cancel_order')
+        await self._wait_until_available('post_order')
+        idempotency_key = str(uuid.uuid4())
+        request = inv.ReplaceOrderRequest()  # construct request due to python-sdk library problems
+        request.account_id = self._account_id
+        request.order_id = order.order_id
+        request.idempotency_key = idempotency_key
+        request.quantity = order.new_quantity
+        request.price = float_to_quotation(order.new_price)
+        request.price_type = inv.PriceType.PRICE_TYPE_UNSPECIFIED
+        response = await self._services.orders.replace_order(request)
+
+        # remove order from pending_orders
+        self._orders.pending_orders.pop(idempotency_key)
+        # add order to open_orders or finished_orders
+        if response.execution_report_status == inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_FILL:
+            self._orders.finished_orders[response.order_id] = user_order
+        else:
+            self._orders.open_orders[response.order_id] = user_order
+        # update order_id
+        user_order.order_id = response.order_id
+        # update status
+        user_order.status = self._tinkoff_order_status_to_local(response.execution_report_status)
+        # update filled quantity
+        user_order.filled_quantity = response.lots_executed
+        # notify strategy
+        self._strategy.on_order_event(user_order)
+
+    def _process_get_order(self, order: inv.OrderState) -> None:
+        # checks
+        assert order.order_id in self._orders.open_orders, 'Sanity check'  # TODO: remove?
+        assert order.order_type == inv.OrderType.ORDER_TYPE_LIMIT, 'Sanity check'  # TODO: remove?
+        user_order = self._orders.open_orders[order.order_id]
+        price_quotation = inv.Quotation(units=order.initial_order_price.units, nano=order.initial_order_price.nano)
+        assert price_quotation == float_to_quotation(user_order.price), 'Sanity check'
+        assert order.lots_requested == user_order.initial_quantity, 'Sanity check'
+        assert order.execution_report_status in [inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_NEW,
+                                                 inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_PARTIALLYFILL,
+                                                 inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_FILL], 'Sanity check'
+        # TODO: remove commission check due to change in commissions
+        assert quotation_to_float(order.initial_commission) == 0 and quotation_to_float(order.executed_commission) == 0 and quotation_to_float(order.service_commission) == 0, 'Commission check'
+
+        new_status = self._tinkoff_order_status_to_local(order.execution_report_status)
+        if user_order.status != new_status:
+            self._logger.warning(f'Order {order.order_id} changed status: {user_order.status} -> {new_status}')
+            user_order.status = new_status
+        if user_order.filled_quantity < order.lots_executed:
+            self._logger.info(f'Order {order.order_id} changed filled quantity: {user_order.filled_quantity}/{user_order.initial_quantity} -> {order.lots_executed}/{order.lots_requested}')
+            user_order.filled_quantity = order.lots_executed
+            if user_order.status != inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_FILL:
+                self._strategy.on_order_event(user_order)  # notify about PARTIAL_FILL
+        if user_order.status == inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_FILL:
+            user_order.status = OrderStatus.FILL
+            assert user_order.filled_quantity == user_order.initial_quantity, 'Sanity check'
+            self._logger.info(f'Order {order.order_id} is filled: {user_order.filled_quantity}/{user_order.initial_quantity}')
+            # remove from open orders
+            self._orders.open_orders.pop(order.order_id)
+            # add to finished orders
+            self._orders.finished_orders[order.order_id] = user_order
+            self._strategy.on_order_event(user_order)  # notify about FILL
 
     @staticmethod
     def _tinkoff_order_status_to_local(status: inv.OrderExecutionReportStatus):
