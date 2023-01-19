@@ -10,6 +10,7 @@ from connector.common.quotation import quotation_to_float
 @dataclass
 class InstrumentInfo:
     figi: str  # tinkoff-investment instrument id
+    lot: int  # number of lots
     price_increment: float
     ticker: str
     class_code: str
@@ -61,6 +62,7 @@ class InfoManager:
         instrument = (await method(id_type=inv.InstrumentIdType.INSTRUMENT_ID_TYPE_FIGI, id=favorite_instrument.figi)).instrument
         return InstrumentInfo(
             figi=favorite_instrument.figi,
+            lot=instrument.lot,
             price_increment=quotation_to_float(instrument.min_price_increment),
             ticker=favorite_instrument.ticker,
             class_code=favorite_instrument.class_code,
