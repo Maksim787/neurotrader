@@ -1,0 +1,16 @@
+# Exclude directories
+.gitignore
+__pycache__/
+.idea
+# Temp
+tmp/
+venv/
+data/
+# Connector
+connector/private/
+connector/private/keys.yaml
+connector/logs/
+# Research
+research/
+# download_data
+securities.txt
