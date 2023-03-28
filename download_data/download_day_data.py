@@ -10,7 +10,7 @@ async def download_ticker_task(session: aiohttp.ClientSession, data_folder: Path
     data = await aiomoex.get_market_history(session, security)
     security_df = pd.DataFrame(data)
     file_path = data_folder / f'{security}.csv'
-    security_df.to_csv(file_path)
+    security_df.to_csv(file_path, index=False)
     print(f'Success: {security}')
 
 
