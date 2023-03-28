@@ -8,6 +8,7 @@ from collections import deque
 from enum import Enum
 
 import tinkoff.invest as inv
+from grpc import StatusCode
 from tinkoff.invest.async_services import AsyncServices
 from connector.info.info_manager import InfoManager, InstrumentInfo
 from connector.common.log import Logging
@@ -241,6 +242,9 @@ class OrderStatus(Enum):
     FILL = 5  # final status
     CANCEL = 6  # final status
 
+    def is_closed(self):
+        return self == OrderStatus.FILL or self == OrderStatus.CANCEL
+
 
 # changing fields of UserOrder
 @dataclass
@@ -314,8 +318,8 @@ class Orders:
         """
         Small string representation of orders
         """
-        return (f'{self._orders_description("pending_orders", self.pending_orders)}'
-                f'{self._orders_description("open_orders", self.open_orders)}'
+        return (f'{self._orders_description("pending_orders", self.pending_orders)}; '
+                f'{self._orders_description("open_orders", self.open_orders)}; '
                 f'{self._orders_description("finished_orders", self.finished_orders)}')
 
     ####################################################################################################
@@ -376,7 +380,7 @@ class Orders:
         """
         After CancelOrder request
         """
-        user_order = self.open_orders.pop(request.order_id)  # remove order from pending_orders
+        user_order = self.pending_orders.pop(request.order_id)  # remove order from pending_orders
         self.finished_orders[request.order_id] = user_order  # add order to finished_orders
         user_order.update_state(status=OrderStatus.CANCEL)
         return user_order
@@ -397,7 +401,7 @@ class Orders:
         Return whether to notify strategy or not
         """
         notify = False
-        user_order = self.open_orders[order.order_id]
+        user_order = self.open_orders[order.order_id] if order.order_id in self.open_orders else self.pending_orders[order.order_id]
         new_status = self._tinkoff_order_status_to_local(order.execution_report_status)
         if user_order.status != new_status:
             logger.warning(f'Order {order.order_id} changed status: {user_order.status} -> {new_status}')
@@ -412,7 +416,10 @@ class Orders:
             assert user_order.filled_quantity == user_order.initial_quantity, 'Sanity check'
             logger.info(f'Order {order.order_id} is filled: {user_order.filled_quantity}/{user_order.initial_quantity}')
             # open order -> finished order
-            self.open_orders.pop(order.order_id)
+            if order.order_id in self.open_orders:
+                self.open_orders.pop(order.order_id)
+            else:
+                self.pending_orders.pop(order.order_id)
             self.finished_orders[order.order_id] = user_order
         return user_order, notify
 
@@ -486,7 +493,7 @@ class RateLimiter:
             return self.SECONDS_IN_MINUTE / self._limit_per_minute
         remaining_time = self.SECONDS_IN_MINUTE - (time.time() - self._queue[0])
         remaining_requests = self._limit_per_minute - len(self._queue)
-        optimal_wait_time = remaining_time / remaining_requests
+        optimal_wait_time = remaining_time / remaining_requests if remaining_requests != 0 else remaining_time
         self._logger.debug(f'{self._method_name}: {remaining_time=}, {remaining_requests=}, {optimal_wait_time=}')
         return optimal_wait_time
 
@@ -630,8 +637,8 @@ class UserManager:
             assert security.balance > 0, 'Sanity check'
             instrument_info = self._im.get_instrument_by_figi(security.figi)
             assert security.instrument_type == instrument_info.instrument_type, 'Sanity check'
-            assert security.balance % instrument_info.lot, 'Sanity check'
-            assert security.blocked % instrument_info.lot, 'Sanity check'
+            assert security.balance % instrument_info.lot == 0, f'Sanity check'
+            assert security.blocked % instrument_info.lot == 0, 'Sanity check'
             security_positions_by_figi[security.figi] = Position(
                 instrument=instrument_info,
                 balance=security.balance // instrument_info.lot,
@@ -688,9 +695,10 @@ class UserManager:
             for order in response.orders:
                 self._process_get_order(order)
             order_ids = {order.order_id for order in response.orders}
-            for order_id, user_order in self._orders.open_orders.items():
-                if order_id not in order_ids:
+            for order_id, user_order in list(self._orders.open_orders.items()) + list(self._orders.pending_orders.items()):
+                if order_id not in order_ids and user_order.status != OrderStatus.PENDING_OPEN:
                     await rate_limiter.wait_until_available()
+                    self._logger.debug(f'Look for {user_order}')
                     response = await self._services.orders.get_order_state(account_id=self._account_id, order_id=order_id)
                     assert response.order_id == order_id, 'Sanity check'
                     self._process_get_order(response)
@@ -748,6 +756,7 @@ class UserManager:
         # From requests with the same idempotency_key only the first one will be executed
         # idempotency_key is needed to repeat request in case we do not get the correct response from server
         idempotency_key = str(uuid.uuid4())
+        request.idempotency_key = idempotency_key
         self._orders.create_pending_open_order(idempotency_key, request)
         # TODO: think about positions updates
 
@@ -811,10 +820,15 @@ class UserManager:
         ####################################################################################################
 
         await self._wait_until_available('cancel_order')
-        if request.order_id not in self._orders.open_orders:
+        if request.order_id not in self._orders.pending_orders:
             self._logger.error(f'Order {request.order_id} was finished before cancel')
             return
-        response = await self._services.orders.cancel_order()
+        try:
+            response = await self._services.orders.cancel_order(account_id=self._account_id, order_id=request.order_id)
+        except inv.exceptions.AioRequestError as ex:
+            self._logger.exception('Exception in CancelOrder')
+            assert ex.code == StatusCode.INVALID_ARGUMENT
+            return
         # log response
         self._logger.info(f'Got CancelOrder response: {response}')
 
@@ -884,7 +898,8 @@ class UserManager:
         self._strategy.on_order_event(user_order)
 
     def _process_get_order(self, order: inv.OrderState) -> None:
-        self._check_get_order_errors(order)
+        if not self._check_get_order_errors(order):
+            return  # order_id was not found in open_orders
 
         ####################################################################################################
         # Update Orders structure
@@ -910,7 +925,7 @@ class UserManager:
     ####################################################################################################
 
     def _check_new_order_errors(self, request: NewOrder, response: inv.PostOrderResponse):
-        assert request.idempotency_key in self._orders.pending_orders, 'Sanity check'
+        assert request.idempotency_key in self._orders.pending_orders, f'Sanity check'
         assert request.instrument.figi == response.figi, 'Sanity check'
         if response.execution_report_status not in [inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_NEW,
                                                     inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_FILL,
@@ -930,14 +945,20 @@ class UserManager:
         # TODO: remove commission check due to change in commissions
         assert quotation_to_float(response.initial_commission) == 0 and quotation_to_float(response.executed_commission) == 0, 'Commission check'
 
-    def _check_get_order_errors(self, order: inv.OrderState) -> None:
-        assert order.order_id in self._orders.open_orders, 'Sanity check'  # TODO: remove?
+    def _check_get_order_errors(self, order: inv.OrderState) -> bool:
+        """
+        Return False => do not need to process this update
+        """
+        if order.order_id not in self._orders.open_orders and order.order_id not in self._orders.pending_orders and order.execution_report_status == inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_NEW:
+            self._logger.error('Did not get PostOrder response yet')
+            return False
+        assert order.order_id in self._orders.open_orders or order.order_id in self._orders.pending_orders, 'Sanity check'  # TODO: remove?
         assert order.order_type == inv.OrderType.ORDER_TYPE_LIMIT, 'Sanity check'  # TODO: remove?
-        user_order = self._orders.open_orders[order.order_id]
-        assert inv.Quotation(units=order.initial_order_price.units, nano=order.initial_order_price.nano) == float_to_quotation(user_order.price), 'Sanity check'
+        user_order = self._orders.open_orders[order.order_id] if order.order_id in self._orders.open_orders else self._orders.pending_orders[order.order_id]
         assert order.lots_requested == user_order.initial_quantity, 'Sanity check'
         assert order.execution_report_status in [inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_NEW,
                                                  inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_PARTIALLYFILL,
                                                  inv.OrderExecutionReportStatus.EXECUTION_REPORT_STATUS_FILL], 'Sanity check'
         # TODO: remove commission check due to change in commissions
         assert quotation_to_float(order.initial_commission) == 0 and quotation_to_float(order.executed_commission) == 0 and quotation_to_float(order.service_commission) == 0, 'Commission check'
+        return True

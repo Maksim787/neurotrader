@@ -37,6 +37,18 @@ class OrderBook:
     limit_up: float  # per instrument (not per lot)
     limit_down: float  # per instrument (not per lot)
 
+    @property
+    def mid_price(self) -> float:
+        return (self.bids[0].price + self.asks[0].price) / 2
+
+    @property
+    def best_bid_price(self) -> float:
+        return self.bids[0].price
+
+    @property
+    def best_ask_price(self) -> float:
+        return self.asks[0].price
+
 
 ####################################################################################################
 # Trade

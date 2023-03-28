@@ -31,6 +31,9 @@ class Logging:
     CRITICAL = logging.CRITICAL
     levels = [DEBUG, INFO, WARNING, ERROR, CRITICAL]
 
+    # log directory
+    log_directory: Path | None = None
+
     # common formatter
     common_formatter = logging.Formatter(
         fmt='[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(name)s] {%(module)s} - %(funcName)s(): %(message)s',
@@ -65,6 +68,10 @@ class Logging:
         cls._set_log_level(name, level, is_file=False)
 
     @classmethod
+    def set_log_directory(cls, log_directory: str):
+        cls.log_directory = Path(log_directory)
+
+    @classmethod
     def _construct_logger(cls, name: str) -> LoggerInfo:
         """
         Construct logger with given name
@@ -74,16 +81,16 @@ class Logging:
             return cls.loggers[name]
 
         # create directory
-        log_directory = Path('connector/logs')
-        if not log_directory.exists():
-            log_directory.mkdir(exist_ok=True)
+        assert cls.log_directory is not None
+        log_directory = Path(cls.log_directory)
+        log_directory.mkdir(exist_ok=True)
 
         # create common handler
         if cls.common_handler is None:
             cls.common_handler = logging.FileHandler(
-                filename=log_directory / f"All.log",
-                mode="w",
-                encoding="utf-8"
+                filename=log_directory / f'All.log',
+                mode='w',
+                encoding='utf-8'
             )
             cls.common_handler.setLevel(cls.DEBUG)
 
@@ -100,9 +107,9 @@ class Logging:
 
         # file handler
         file_handler = logging.FileHandler(
-            filename=log_directory / f"{name}.log",
-            mode="w",
-            encoding="utf-8"
+            filename=log_directory / f'{name}.log',
+            mode='w',
+            encoding='utf-8'
         )
         file_handler.setFormatter(cls.common_formatter)
         file_handler.setLevel(logger_info.file_log_level or cls.DEBUG)
