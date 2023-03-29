@@ -6,6 +6,7 @@ __pycache__/
 tmp/
 venv/
 data/
+third_party/
 # Connector
 connector/private/
 connector/private/keys.yaml
