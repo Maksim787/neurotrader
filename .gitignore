@@ -12,6 +12,8 @@ connector/private/
 connector/private/keys.yaml
 connector/logs/
 # Research
-research/
+*.ipynb
+research/wandb/*
+figures/
 # download_data
 securities.txt
