@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 import aiomoex
 import pandas as pd
+import shutil
 from enum import Enum, auto
 from pathlib import Path
 from dataclasses import dataclass
@@ -52,7 +53,8 @@ async def download_day_close_or_candles(time_series_folder: Path, time_series_co
     if time_series_folder.exists() and not force_download:
         print(f'Use cache: {time_series_folder}')
         return
-    time_series_folder.unlink(missing_ok=True)
+    if time_series_folder.exists():
+        shutil.rmtree(time_series_folder)
     time_series_folder.mkdir(parents=True, exist_ok=True)
     async with aiohttp.ClientSession() as session:
         all_securities_df = await download_tickers(tickers_folder, force_download=force_download)
@@ -68,12 +70,12 @@ if __name__ == '__main__':
         time_series_folder=Path('data/day_close/'),
         time_series_config=TimeSeriesConfig(TimeSeriesType.CLOSE),
         tickers_folder=Path('data/tickers/'),
-        force_download=False
+        force_download=True
     ))
 
     asyncio.run(download_day_close_or_candles(
         time_series_folder=Path('data/day_candles/'),
         time_series_config=TimeSeriesConfig(TimeSeriesType.CANDLES, candle_interval=24),
         tickers_folder=Path('data/tickers/'),
-        force_download=False
+        force_download=True
     ))
