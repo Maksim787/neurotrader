@@ -3,8 +3,8 @@ import pandas as pd
 from dataclasses import dataclass
 from sklearn.model_selection import train_test_split
 
-from load import load_data, train_test_split_our, TEST_RATIO
-from utils import is_sorted
+from .load import load_data, train_test_split_our, TEST_RATIO
+from .utils import is_sorted
 
 TRAIN_SIZE_DAYS = 91
 TEST_SIZE_DAYS = 91

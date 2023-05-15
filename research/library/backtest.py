@@ -7,8 +7,8 @@ import typing as tp
 from dataclasses import dataclass
 from pathlib import Path
 
-from dataset import Observation
-from load import TRADING_DAYS_IN_YEAR
+from .dataset import Observation
+from .load import TRADING_DAYS_IN_YEAR
 
 
 @dataclass
@@ -170,11 +170,11 @@ class PortfolioTrainTestStats:
         self.test_stats.plot_returns_hist(label=f'{label}: test')
 
 
-def _load_or_compute(cache_folder: str, name: str, function: tp.Callable):
+def _load_or_compute(cache_folder: str, name: str, function: tp.Callable, use_cache: bool):
     cache_folder = Path(cache_folder)
     assert cache_folder.exists()
     cache_path = cache_folder / (f'{name}.pickle')
-    if cache_path.exists():
+    if cache_path.exists() and use_cache:
         with open(cache_path, 'rb') as f:
             obj = pickle.load(f)
     else:
@@ -192,14 +192,14 @@ class Strategy:
     train_w: pd.DataFrame = None
     test_w: pd.DataFrame = None
 
-    def compute_train_test_w(self, cache_folder: str):
-        self.train_w, self.test_w = _load_or_compute(cache_folder, f'{self.name}_weights', lambda: (self.get_train_w(), self.get_test_w()))
+    def compute_train_test_w(self, cache_folder: str, use_cache: bool):
+        self.train_w, self.test_w = _load_or_compute(cache_folder, f'{self.name}_weights', lambda: (self.get_train_w(), self.get_test_w()), use_cache)
 
 
-def get_stats(strategies: list[Strategy], observations_train: list[Observation], observations_test: list[Observation], cache_folder: str) -> list[PortfolioTrainTestStats]:
+def get_stats(strategies: list[Strategy], observations_train: list[Observation], observations_test: list[Observation], cache_folder: str, use_cache: bool) -> list[PortfolioTrainTestStats]:
     stats = []
     for strategy in strategies:
-        strategy.compute_train_test_w(cache_folder)
+        strategy.compute_train_test_w(cache_folder, use_cache)
         new_stats = PortfolioTrainTestStats(
             portfolio_label=strategy.name,
             train_w=strategy.train_w,
@@ -249,11 +249,11 @@ def plot_weights(stats: list[PortfolioTrainTestStats]):
 def compare_strategies(strategies: list[Strategy], observations_train: list[Observation], observations_test: list[Observation],
                        print_stats_: bool = True,
                        plot_cumulative_returns_: bool = True,
-                       plot_weights_: bool = True, cache_folder: str = 'cache/') -> list[PortfolioTrainTestStats]:
+                       plot_weights_: bool = True, cache_folder: str = 'cache/', use_cache: bool = True) -> list[PortfolioTrainTestStats]:
     assert len(strategies) >= 1
 
     # compute stats
-    stats = get_stats(strategies, observations_train, observations_test, cache_folder)
+    stats = get_stats(strategies, observations_train, observations_test, cache_folder, use_cache)
 
     if print_stats_:
         print_stats(stats)

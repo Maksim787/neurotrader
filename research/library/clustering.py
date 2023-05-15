@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from correlations import plot_correlations
+from .correlations import plot_correlations
 
 
 def plot_correlation_matrix_clusters(Sigma: pd.DataFrame, labels: np.array, print_clusters: bool = False):

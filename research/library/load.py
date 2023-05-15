@@ -7,7 +7,7 @@ import datetime
 from pathlib import Path
 from sklearn.model_selection import train_test_split
 
-from utils import is_sorted
+from .utils import is_sorted
 
 N_TARGET_TICKERS = 31
 REMOVE_TICKERS = ['IRAO']

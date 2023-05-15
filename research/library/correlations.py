@@ -10,8 +10,8 @@ from scipy.cluster.hierarchy import (
     ward,
 )
 
-from utils import is_sorted, unzip
-from dataset import Observation
+from .utils import is_sorted, unzip
+from .dataset import Observation
 
 
 N_REMAINING_COMPONENTS = 2
@@ -113,22 +113,23 @@ def denoise(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components:
 
 
 def denoise_and_detone(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components=None, n_removed_components=1) -> tuple[pd.DataFrame, int]:
-    T, N = df_price.shape
-    c = N / T
-    U, S, VT = np.linalg.svd(Sigma)
-    if n_remaining_components is None:
-        lambda_minus, lambda_plus = get_marchenko_pastur_lambdas(sigma=1.0, c=c)
-        removed_values = (S < lambda_plus)
-        n_remaining_components = len(S) - removed_values.sum() - n_removed_components
-    else:
-        assert is_sorted(np.flip(S))
-        removed_values = (S <= S[n_remaining_components + n_removed_components])
-    # denoise
-    S[removed_values] = S[removed_values].mean()
-    # detone
-    S[range(n_removed_components)] = 0
-    Sigma_detoned_denoised = _normalize_correlation_matrix(_reconstruct_from_svd(U, S, VT))
-    return pd.DataFrame(Sigma_detoned_denoised, columns=Sigma.columns, index=Sigma.index), n_remaining_components
+    return denoise(df_price,detone(Sigma,  n_removed_components=n_removed_components), n_remaining_components=n_remaining_components)
+    # T, N = df_price.shape
+    # c = N / T
+    # U, S, VT = np.linalg.svd(Sigma)
+    # if n_remaining_components is None:
+    #     lambda_minus, lambda_plus = get_marchenko_pastur_lambdas(sigma=1.0, c=c)
+    #     removed_values = (S < lambda_plus)
+    #     n_remaining_components = len(S) - removed_values.sum() - n_removed_components
+    # else:
+    #     assert is_sorted(np.flip(S))
+    #     removed_values = (S <= S[n_remaining_components + n_removed_components])
+    # # denoise
+    # S[removed_values] = S[removed_values].mean()
+    # # detone
+    # S[range(n_removed_components)] = 0
+    # Sigma_detoned_denoised = _normalize_correlation_matrix(_reconstruct_from_svd(U, S, VT))
+    # return pd.DataFrame(Sigma_detoned_denoised, columns=Sigma.columns, index=Sigma.index), n_remaining_components
 
 
 @dataclass

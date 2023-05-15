@@ -5,9 +5,9 @@ from enum import Enum, auto
 from scipy.optimize import minimize
 from tqdm.notebook import tqdm
 
-from dataset import Observation
-from correlations import get_returns_correlations
-from load import TRADING_DAYS_IN_YEAR
+from .dataset import Observation
+from .correlations import get_returns_correlations
+from .load import TRADING_DAYS_IN_YEAR
 
 
 class MarkowitzMethod(Enum):
