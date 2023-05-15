@@ -113,11 +113,27 @@ def denoise(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components:
 
 
 def denoise_and_detone(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components=None, n_removed_components=1) -> tuple[pd.DataFrame, int]:
-    return denoise(df_price, detone(Sigma, n_removed_components=n_removed_components), n_remaining_components=n_remaining_components)
+    T, N = df_price.shape
+    c = N / T
+    U, S, VT = np.linalg.svd(Sigma)
+    if n_remaining_components is None:
+        lambda_minus, lambda_plus = get_marchenko_pastur_lambdas(sigma=1.0, c=c)
+        removed_values = (S < lambda_plus)
+        n_remaining_components = len(S) - removed_values.sum() - n_removed_components
+    else:
+        assert is_sorted(np.flip(S))
+        removed_values = (S <= S[n_remaining_components + n_removed_components])
+    # denoise
+    S[removed_values] = S[removed_values].mean()
+    # detone
+    S[range(n_removed_components)] = 0
+    Sigma_detoned_denoised = _normalize_correlation_matrix(_reconstruct_from_svd(U, S, VT))
+    return pd.DataFrame(Sigma_detoned_denoised, columns=Sigma.columns, index=Sigma.index), n_remaining_components
 
 
 @dataclass
 class CorrelationMatrices:
+    returns: list[pd.DataFrame]
     Sigmas: list[pd.DataFrame]
     Sigmas_detoned: list[pd.DataFrame]
     Sigmas_denoised: list[pd.DataFrame]
@@ -129,17 +145,19 @@ class CorrelationMatrices:
         assert len(self.Sigmas) == len(self.Sigmas_detoned) == len(self.Sigmas_denoised) == len(self.Sigmas_detoned_denoised) == len(self.n_remaining_components_denoised) == len(self.n_remaining_components_detoned_denoised)
 
 
-def get_correlation_matrices(observations: list[Observation], n_remaining_components_denoised: int | None = None, n_remaining_components_detoned_denoised: int | None = None) -> CorrelationMatrices:
-    correlations = [get_returns_correlations(observation.df_price_train) for observation in observations]
+def get_correlation_matrices(observations: list[Observation], is_train: bool, n_remaining_components_denoised: int | None = None, n_remaining_components_detoned_denoised: int | None = None) -> CorrelationMatrices:
+    correlations = [get_returns_correlations(observation.df_price_train if is_train else observation.df_price_test) for observation in observations]
+    returns = [c.returns for c in correlations]
     Sigmas = [c.corr for c in correlations]
-    Sigmas_detoned = [detone(Sigma_train) for Sigma_train in Sigmas]
+    Sigmas_detoned = [detone(Sigma) for Sigma in Sigmas]
     Sigmas_denoised, n_remaining_components_denoised = unzip([
-        denoise(observation.df_price_train, Sigma_train, n_remaining_components_denoised) for observation, Sigma_train in zip(observations, Sigmas)
+        denoise(observation.df_price_train if is_train else observation.df_price_test, Sigma, n_remaining_components_denoised) for observation, Sigma in zip(observations, Sigmas)
     ])
     Sigmas_detoned_denoised, n_remaining_components_detoned_denoised = unzip([
-        denoise_and_detone(observation.df_price_train, Sigma_train, n_remaining_components=n_remaining_components_detoned_denoised) for observation, Sigma_train in zip(observations, Sigmas)
+        denoise_and_detone(observation.df_price_train if is_train else observation.df_price_test, Sigma, n_remaining_components=n_remaining_components_detoned_denoised) for observation, Sigma in zip(observations, Sigmas)
     ])
     return CorrelationMatrices(
+        returns=returns,
         Sigmas=Sigmas,
         Sigmas_detoned=Sigmas_detoned,
         Sigmas_denoised=Sigmas_denoised,

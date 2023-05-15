@@ -7,6 +7,7 @@ tmp/
 venv/
 data/
 third_party/
+cache/
 # Connector
 connector/private/
 connector/private/keys.yaml

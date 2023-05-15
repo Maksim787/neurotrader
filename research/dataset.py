@@ -3,20 +3,23 @@ import pandas as pd
 from dataclasses import dataclass
 
 from load import load_data, train_test_split
-
+from utils import is_sorted
 
 TRAIN_SIZE_MONTHS = 2
-TEST_SIZE_MONTHS = 1
+TEST_SIZE_MONTHS = 2
 
 
 @dataclass
 class Observation:
-    df_price_train: pd.DataFrame
-    df_price_test: pd.DataFrame
+    df_price_train: pd.DataFrame  # len = TRAIN_SIZE_MONTHS
+    df_price_test: pd.DataFrame  # len = TEST_SIZE_MONTHS
+    next_price_test: pd.Series = None  # first row of df_price_test
 
     def __post_init__(self):
         assert np.all(self.df_price_train.columns == self.df_price_test.columns)
         assert self.df_price_train.index[-1] < self.df_price_test.index[0]
+        assert is_sorted(self.df_price_train.index) and is_sorted(self.df_price_test.index)
+        self.next_price_test = self.df_price_test.iloc[0]
 
 
 def create_train_test_dataset(
