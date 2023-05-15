@@ -9,7 +9,7 @@ _Параметры:_
 - `remove_tickers`: `list[str]` — какие тикеры нужно удалить из выборки.
 - `min_observations_per_year`: `int` — минимальное число наблюдений в году, чтобы год вошел в выборку. Нужно для того, чтобы удалить первый и последний года из выборки.
 - `verbose`: `bool` — нужно ли рисовать графики, визуализирующие выборку.
-1. `train_test_split` — делит выборку на Train и Test. Train идет строго до Test
+1. `train_test_split_our` — делит выборку на Train и Test. Train идет строго до Test
 _Параметры:_
 - `df_price`: `pd.DataFrame` — выборка из цен из функции `load_data`.
 - `test_start_date`: `pd.Timestamp` — дата начала Test выборки.

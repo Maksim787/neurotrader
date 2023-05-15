@@ -5,7 +5,7 @@ import seaborn as sns
 import os
 import datetime
 from pathlib import Path
-
+from sklearn.model_selection import train_test_split
 
 from utils import is_sorted
 
@@ -15,7 +15,7 @@ REMOVE_TICKERS = ['IRAO']
 # REMOVE_TICKERS = ['HYDR']
 
 MIN_OBSERVATIONS_PER_YEAR = 240
-TEST_START_DATE = pd.to_datetime("2019-01-01")
+TEST_RATIO = 0.3
 TRADING_DAYS_IN_YEAR = 252
 
 
@@ -70,9 +70,8 @@ def load_data(day_close_folder: str = '../data/day_close/', n_target_tickers: in
     return df_price
 
 
-def train_test_split(df_price: pd.DataFrame, test_start_date: pd.Timestamp = TEST_START_DATE, verbose: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
-    df_price_train = df_price[df_price.index < test_start_date]
-    df_price_test = df_price[df_price.index >= test_start_date]
+def train_test_split_our(df_price: pd.DataFrame, test_ratio:float = TEST_RATIO, verbose: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
+    df_price_train, df_price_test = train_test_split(df_price, test_size=test_ratio, shuffle=False)
 
     assert is_sorted(df_price_train.index) and is_sorted(df_price_test.index)
     assert df_price_test.index[0] > df_price_train.index[-1]

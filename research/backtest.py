@@ -2,7 +2,10 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import pickle
+import typing as tp
 from dataclasses import dataclass
+from pathlib import Path
 
 from dataset import Observation
 from load import TRADING_DAYS_IN_YEAR
@@ -61,9 +64,8 @@ class PortfolioStats:
         returns = []
         dates = []
         for observation in self.observations:
-            assert observation.df_price_test.index[0] > observation.df_price_train.index[-1]
-            returns.append(observation.df_price_test.iloc[0] / observation.df_price_train.iloc[-1] - 1)
-            dates.append(observation.df_price_train.index[-1])
+            returns.append(observation.next_returns)
+            dates.append(observation.df_returns_test.index[0])
         return pd.DataFrame(returns, index=dates, columns=self.columns)
 
     def _get_portfolio_returns_pct(self, weights: pd.DataFrame) -> pd.Series:
@@ -71,7 +73,7 @@ class PortfolioStats:
         assert np.all(self.returns.index == weights.index)
         # at t we decide to allocate w rubles to each asset
         # then we get the return p(t + 1) / p(t) - 1
-        # returns(t) = p(t + 1) / p(t) - 1
+        # returns(t) = p(t) / p(t - 1) - 1
         portfolio_returns = (self.returns * weights).sum(axis=1)
         return portfolio_returns * 100
 
@@ -168,21 +170,45 @@ class PortfolioTrainTestStats:
         self.test_stats.plot_returns_hist(label=f'{label}: test')
 
 
+def _load_or_compute(cache_folder: str, name: str, function: tp.Callable):
+    cache_folder = Path(cache_folder)
+    assert cache_folder.exists()
+    cache_path = cache_folder / (f'{name}.pickle')
+    if cache_path.exists():
+        with open(cache_path, 'rb') as f:
+            obj = pickle.load(f)
+    else:
+        obj = function()
+        with open(cache_path, 'wb') as f:
+            pickle.dump(obj, f)
+    return obj
+
+
 @dataclass
 class Strategy:
     name: str
-    train_w: pd.DataFrame
-    test_w: pd.DataFrame
+    get_train_w: tp.Callable
+    get_test_w: tp.Callable
+    train_w: pd.DataFrame = None
+    test_w: pd.DataFrame = None
+
+    def compute_train_test_w(self, cache_folder: str):
+        self.train_w, self.test_w = _load_or_compute(cache_folder, f'{self.name}_weights', lambda: (self.get_train_w(), self.get_test_w()))
 
 
-def get_stats(strategies: list[Strategy], observations_train: list[Observation], observations_test: list[Observation]) -> list[PortfolioTrainTestStats]:
-    return [PortfolioTrainTestStats(
-        portfolio_label=strategy.name,
-        train_w=strategy.train_w,
-        test_w=strategy.test_w,
-        observations_train=observations_train,
-        observations_test=observations_test
-    ) for strategy in strategies]
+def get_stats(strategies: list[Strategy], observations_train: list[Observation], observations_test: list[Observation], cache_folder: str) -> list[PortfolioTrainTestStats]:
+    stats = []
+    for strategy in strategies:
+        strategy.compute_train_test_w(cache_folder)
+        new_stats = PortfolioTrainTestStats(
+            portfolio_label=strategy.name,
+            train_w=strategy.train_w,
+            test_w=strategy.test_w,
+            observations_train=observations_train,
+            observations_test=observations_test
+        )
+        stats.append(new_stats)
+    return stats
 
 
 def print_stats(stats: list[PortfolioTrainTestStats]):
@@ -211,7 +237,7 @@ def plot_cumulative_returns(stats: list[PortfolioTrainTestStats]):
 def plot_weights(stats: list[PortfolioTrainTestStats]):
     n_strats = len(stats)
 
-    plt.subplots(n_strats, 1, figsize=(10, 12))
+    plt.subplots(n_strats, 1, figsize=(10, 3 * n_strats))
     for i, stat in enumerate(stats, start=1):
         plt.subplot(n_strats, 1, i)
         stat.plot_weights()
@@ -223,11 +249,11 @@ def plot_weights(stats: list[PortfolioTrainTestStats]):
 def compare_strategies(strategies: list[Strategy], observations_train: list[Observation], observations_test: list[Observation],
                        print_stats_: bool = True,
                        plot_cumulative_returns_: bool = True,
-                       plot_weights_: bool = True):
+                       plot_weights_: bool = True, cache_folder: str = 'cache/') -> list[PortfolioTrainTestStats]:
     assert len(strategies) >= 1
 
     # compute stats
-    stats = get_stats(strategies, observations_train, observations_test)
+    stats = get_stats(strategies, observations_train, observations_test, cache_folder)
 
     if print_stats_:
         print_stats(stats)
@@ -235,3 +261,5 @@ def compare_strategies(strategies: list[Strategy], observations_train: list[Obse
         plot_cumulative_returns(stats)
     if plot_weights_:
         plot_weights(stats)
+
+    return stats
