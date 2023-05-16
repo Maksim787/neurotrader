@@ -69,23 +69,6 @@ def load_data(day_close_folder: str = '../data/day_close/', n_target_tickers: in
     print()
     return df_price
 
-
-def train_test_split_our(df_price: pd.DataFrame, test_ratio:float = TEST_RATIO, verbose: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
-    df_price_train, df_price_test = train_test_split(df_price, test_size=test_ratio, shuffle=False)
-
-    assert is_sorted(df_price_train.index) and is_sorted(df_price_test.index)
-    assert df_price_test.index[0] > df_price_train.index[-1]
-
-    print(f'Train size: {len(df_price_train)}. Test size: {len(df_price_test)}. Test ratio: {len(df_price_test) / (len(df_price_train) + len(df_price_test))}')
-    if verbose:
-        plt.title('Train Test split')
-        _plot_ticker('SBER', df_price_train, df_price_test)
-        _plot_ticker('SBERP', df_price_train, df_price_test, plot_train_test_split_line=True)
-        plt.show()
-
-    return df_price_train, df_price_test
-
-
 def _is_earlier(df: pd.DataFrame, date: datetime.date) -> bool:
     return df.iloc[0]['TRADEDATE'] <= pd.to_datetime(date)
 
@@ -143,12 +126,3 @@ def _plot_observations_by_year(df_price):
     plt.ylabel('n_observations')
     plt.xlabel('year')
     plt.show()
-
-
-def _plot_ticker(ticker: str, df_price_train: pd.DataFrame, df_price_test: pd.DataFrame, plot_train_test_split_line: bool = False):
-    plt.plot(df_price_train[ticker], label=f'{ticker} train')
-    plt.plot(df_price_test[ticker], label=f'{ticker} test')
-    if plot_train_test_split_line:
-        plt.axvline(df_price_test.index[0], linestyle='dashed', label=f'border: {df_price_test.index[0].strftime("%Y-%m-%d")}')
-    plt.ylabel('Price')
-    plt.legend(loc='upper left')

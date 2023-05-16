@@ -237,7 +237,7 @@ def plot_cumulative_returns(stats: list[PortfolioTrainTestStats]):
 def plot_weights(stats: list[PortfolioTrainTestStats]):
     n_strats = len(stats)
 
-    plt.subplots(n_strats, 1, figsize=(10, 3 * n_strats))
+    plt.subplots(n_strats, 1, figsize=(10, 2 * n_strats))
     for i, stat in enumerate(stats, start=1):
         plt.subplot(n_strats, 1, i)
         stat.plot_weights()

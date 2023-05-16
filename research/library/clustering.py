@@ -50,8 +50,8 @@ class OptimalClusteringResult:
 
 
 def find_optimal_clusters_number(Sigma_train: pd.DataFrame, Sigma_test: pd.DataFrame, n_clusters_list: list[int], model: str) -> OptimalClusteringResult:
-    dist_matrix_train = _get_distance_matrix(Sigma_train)
-    dist_matrix_test = _get_distance_matrix(Sigma_test)
+    dist_matrix_train = get_distance_matrix(Sigma_train)
+    dist_matrix_test = get_distance_matrix(Sigma_test)
 
     scores_train = []
     scores_test = []
@@ -89,7 +89,7 @@ def get_clustering_results(dist_matrix_train: pd.DataFrame, dist_matrix_test: pd
     return ClusteringResult(score_train, score_test, labels)
 
 
-def _get_distance_matrix(Sigma: pd.DataFrame) -> pd.DataFrame:
+def get_distance_matrix(Sigma: pd.DataFrame) -> pd.DataFrame:
     result = np.sqrt(0.5 * (1 - np.minimum(Sigma, 1.0)))
     result.iloc[range(len(Sigma)), range(len(Sigma))] = 0.0
     return result

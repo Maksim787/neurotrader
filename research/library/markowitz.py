@@ -92,7 +92,7 @@ def _get_markowitz_MinVarianceMaxReturnGivenQ(Sigma: np.array, returns: np.array
     assert Sigma.shape == (n_assets, n_assets)
     assert returns.shape == (n_assets,)
 
-    bounds = [(0, None)] * n_assets
+    bounds = [(0, 1)] * n_assets
     w0 = [1 / n_assets] * n_assets
     constraints = [{'type': 'eq', 'fun': lambda w:  w.sum() - 1}]
     def objective(w): return w.reshape(1, -1) @ Sigma @ w.reshape(-1, 1) - q * returns @ w

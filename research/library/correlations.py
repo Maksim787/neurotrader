@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import seaborn as sns
+import warnings
 from dataclasses import dataclass, field
 from scipy.cluster.hierarchy import (
     average,
@@ -9,9 +10,12 @@ from scipy.cluster.hierarchy import (
     single,
     ward,
 )
+from scipy.cluster.hierarchy import ClusterWarning
 
 from .utils import is_sorted, unzip
 from .dataset import Observation
+
+warnings.simplefilter("ignore", ClusterWarning)
 
 
 N_REMAINING_COMPONENTS = 2
@@ -113,7 +117,7 @@ def denoise(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components:
 
 
 def denoise_and_detone(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components=None, n_removed_components=1) -> tuple[pd.DataFrame, int]:
-    return denoise(df_price,detone(Sigma,  n_removed_components=n_removed_components), n_remaining_components=n_remaining_components)
+    return denoise(df_price, detone(Sigma,  n_removed_components=n_removed_components), n_remaining_components=n_remaining_components)
     # T, N = df_price.shape
     # c = N / T
     # U, S, VT = np.linalg.svd(Sigma)
@@ -136,6 +140,9 @@ def denoise_and_detone(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_
 class CorrelationMatrices:
     returns: list[pd.DataFrame]
     Sigmas: list[pd.DataFrame]
+    singular_values: list[np.array]
+    singular_vectors: list[np.array]
+    stds: list[np.array]
     Sigmas_detoned: list[pd.DataFrame]
     Sigmas_denoised: list[pd.DataFrame]
     Sigmas_detoned_denoised: list[pd.DataFrame]
@@ -157,9 +164,19 @@ def get_correlation_matrices(observations: list[Observation], is_train: bool, n_
     Sigmas_detoned_denoised, n_remaining_components_detoned_denoised = unzip([
         denoise_and_detone(observation.df_price_train if is_train else observation.df_price_test, Sigma, n_remaining_components=n_remaining_components_detoned_denoised) for observation, Sigma in zip(observations, Sigmas)
     ])
+    singular_vectors = []
+    singular_values = []
+    for Sigma in Sigmas:
+        U, S, VT = np.linalg.svd(Sigma)
+        singular_values.append(S)
+        singular_vectors.append(U)
+    stds = [np.sqrt(np.diag(c.cov)) for c in correlations]
     return CorrelationMatrices(
         returns=returns,
         Sigmas=Sigmas,
+        singular_values=singular_values,
+        singular_vectors=singular_vectors,
+        stds=stds,
         Sigmas_detoned=Sigmas_detoned,
         Sigmas_denoised=Sigmas_denoised,
         Sigmas_detoned_denoised=Sigmas_detoned_denoised,
@@ -172,15 +189,14 @@ def _hierarchical_clustering(distance_matrix, method="complete"):
     # some algorithm from internet
 
     if method == "complete":
-        Z = complete(distance_matrix)
+        return complete(distance_matrix)
     if method == "single":
-        Z = single(distance_matrix)
+        return single(distance_matrix)
     if method == "average":
-        Z = average(distance_matrix)
+        return average(distance_matrix)
     if method == "ward":
-        Z = ward(distance_matrix)
-
-    return Z
+        return ward(distance_matrix)
+    assert False, 'Unreachable'
 
 
 def _reconstruct_from_svd(U, S, VT):
