@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from .correlations import plot_correlations
+from .correlations import plot_correlations, get_distance_matrix
 
 
 def plot_correlation_matrix_clusters(Sigma: pd.DataFrame, labels: np.array, print_clusters: bool = False):
@@ -87,9 +87,3 @@ def get_clustering_results(dist_matrix_train: pd.DataFrame, dist_matrix_test: pd
     score_train = silhouette_score(dist_matrix_train, labels, metric='precomputed')
     score_test = silhouette_score(dist_matrix_test, labels, metric='precomputed')
     return ClusteringResult(score_train, score_test, labels)
-
-
-def get_distance_matrix(Sigma: pd.DataFrame) -> pd.DataFrame:
-    result = np.sqrt(0.5 * (1 - np.minimum(Sigma, 1.0)))
-    result.iloc[range(len(Sigma)), range(len(Sigma))] = 0.0
-    return result

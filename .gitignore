@@ -16,5 +16,6 @@ connector/logs/
 *.ipynb
 research/wandb/*
 figures/
+tables/
 # download_data
 securities.txt

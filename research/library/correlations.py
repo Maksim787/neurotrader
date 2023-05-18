@@ -46,7 +46,7 @@ def get_returns_correlations(df_price) -> ReturnsCorrelations:
 
 def sort_corr(corr_matrix: pd.DataFrame) -> list[str]:
     corr_matrix = corr_matrix.copy()
-    distance_matrix = np.sqrt(0.5 * (1 - corr_matrix))
+    distance_matrix = get_distance_matrix(corr_matrix)
 
     linkage_matrix = _hierarchical_clustering(distance_matrix)
 
@@ -169,7 +169,7 @@ def get_correlation_matrices(observations: list[Observation], is_train: bool, n_
     for Sigma in Sigmas:
         U, S, VT = np.linalg.svd(Sigma)
         singular_values.append(S)
-        singular_vectors.append(U)
+        singular_vectors.append(U.T)
     stds = [np.sqrt(np.diag(c.cov)) for c in correlations]
     return CorrelationMatrices(
         returns=returns,
@@ -185,9 +185,13 @@ def get_correlation_matrices(observations: list[Observation], is_train: bool, n_
     )
 
 
-def _hierarchical_clustering(distance_matrix, method="complete"):
-    # some algorithm from internet
+def get_distance_matrix(Sigma: pd.DataFrame) -> pd.DataFrame:
+    result = np.sqrt(0.5 * (1 - np.minimum(Sigma, 1.0)))
+    result.iloc[range(len(Sigma)), range(len(Sigma))] = 0.0
+    return result
 
+
+def _hierarchical_clustering(distance_matrix, method="complete"):
     if method == "complete":
         return complete(distance_matrix)
     if method == "single":
