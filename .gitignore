@@ -7,11 +7,15 @@ tmp/
 venv/
 data/
 third_party/
+cache/
 # Connector
 connector/private/
 connector/private/keys.yaml
 connector/logs/
 # Research
-research/
+*.ipynb
+research/wandb/*
+figures/
+tables/
 # download_data
 securities.txt
