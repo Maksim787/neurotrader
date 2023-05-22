@@ -5,7 +5,7 @@ import typing as tp
 import torch
 import torch.nn as nn
 
-from a2c import A2CEnv, A2CAgent, A2C
+from .a2c import A2CEnv, A2CAgent, A2C
 
 
 class DDPGEnv(A2CEnv):
@@ -53,7 +53,7 @@ class DDPG(A2C):
     def __init__(self,
                  first_agent: DDPGFirstAgent,
                  second_agent: DDPGSecondAgent,
-                 optimizer: torch.optim.optimizer,
+                 optimizer: torch.optim.Optimizer,
                  env: A2CEnv,
                  value_loss_coef: float = 0.25,
                  entropy_coef: float = 0.01,

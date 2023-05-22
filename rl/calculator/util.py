@@ -6,9 +6,9 @@ import typing as tp
 
 import torch
 
-from stats import exp_moving_average, gk_std
-from rl.algo.reinforce import ReinforceEnv, ReinforceAgent
-from rl.algo.a2c import A2CEnv, A2CAgent
+from .stats import exp_moving_average, gk_std
+from .algo.reinforce import ReinforceEnv, ReinforceAgent
+from .algo.a2c import A2CEnv, A2CAgent
 
 
 def preprocess_table(table: pd.DataFrame,

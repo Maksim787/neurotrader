@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from base import BaseEnv, BaseAgent, BaseAlgo
+from .base import BaseEnv, BaseAgent, BaseAlgo
 
 
 class A2CEnv(BaseEnv):
@@ -158,7 +158,7 @@ class A2CAgent(BaseAgent):
 class A2C(BaseAlgo):
     def __init__(self,
                  agent: BaseAgent,
-                 optimizer: torch.optim.optimizer,
+                 optimizer: torch.optim.Optimizer,
                  env: BaseEnv,
                  value_loss_coef: float = 0.25,
                  entropy_coef: float = 0.01,
@@ -178,7 +178,7 @@ class A2C(BaseAlgo):
         assert max_grad_norm > 0, f'Limit for grad norm must be positive'
 
         self.agent: BaseAgent = agent
-        self.optimizer: torch.optim.optimizer = optimizer
+        self.optimizer: torch.optim.Optimizer = optimizer
         self.env: BaseEnv = env
         self.value_loss_coef: float = value_loss_coef
         self.entropy_coef: float = entropy_coef

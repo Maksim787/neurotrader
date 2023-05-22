@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-from base import BaseEnv, BaseAgent, BaseAlgo
+from .base import BaseEnv, BaseAgent, BaseAlgo
 
 
 class ReinforceEnv(BaseEnv):
@@ -122,7 +122,7 @@ class ReinforceAgent(BaseAgent):
 class Reinforce(BaseAlgo):
     def __init__(self,
                  agent: BaseAgent,
-                 optimizer: torch.optim.optimizer,
+                 optimizer: torch.optim.Optimizer,
                  env: BaseEnv,
                  entropy_coef: float = 0.1,
                  max_grad_norm: float = 0.5):
@@ -139,7 +139,7 @@ class Reinforce(BaseAlgo):
         assert max_grad_norm > 0, f'Limit for grad norm must be positive'
 
         self.agent: BaseAgent = agent
-        self.optimizer: torch.optim.optimizer = optimizer
+        self.optimizer: torch.optim.Optimizer = optimizer
         self.entropy_coef: float = entropy_coef
         self.max_grad_norm: float = max_grad_norm
 

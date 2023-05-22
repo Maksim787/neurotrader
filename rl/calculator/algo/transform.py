@@ -4,8 +4,8 @@ import numpy as np
 
 import torch
 
-from a2c import A2CAgent
-from ddpg import DDPGSecondAgent
+from .a2c import A2CAgent
+from .ddpg import DDPGSecondAgent
 
 
 class Transformer(ABC):
