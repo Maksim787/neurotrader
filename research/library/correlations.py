@@ -36,7 +36,7 @@ class ReturnsCorrelations:
         assert np.all(self.index == self.corr.index)
 
 
-def get_returns_correlations(df_price) -> ReturnsCorrelations:
+def get_returns_correlations(df_price: pd.DataFrame) -> ReturnsCorrelations:
     df_returns = df_price.pct_change().dropna()
     matrix_corr = df_returns.corr()
     matrix_cov = df_returns.cov()
@@ -59,7 +59,7 @@ def sort_corr(corr_matrix: pd.DataFrame) -> list[str]:
     return sorted_cols
 
 
-def plot_correlations(Sigma, labels, **kwargs):
+def plot_correlations(Sigma: pd.DataFrame, labels: list[str], **kwargs):
     return sns.heatmap(Sigma.loc[labels, labels], cmap='coolwarm', xticklabels=True, yticklabels=True, square=True, vmin=-1, vmax=1, **kwargs)
 
 
@@ -116,7 +116,7 @@ def denoise(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components:
     return pd.DataFrame(Sigma_denoised, columns=Sigma.columns, index=Sigma.index), n_remaining_components
 
 
-def denoise_and_detone(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components=None, n_removed_components=1) -> tuple[pd.DataFrame, int]:
+def denoise_and_detone(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_components: int | None = None, n_removed_components: int = 1) -> tuple[pd.DataFrame, int]:
     return denoise(df_price, detone(Sigma,  n_removed_components=n_removed_components), n_remaining_components=n_remaining_components)
     # T, N = df_price.shape
     # c = N / T
@@ -138,16 +138,16 @@ def denoise_and_detone(df_price: pd.DataFrame, Sigma: pd.DataFrame, n_remaining_
 
 @dataclass
 class CorrelationMatrices:
-    returns: list[pd.DataFrame]
-    Sigmas: list[pd.DataFrame]
-    singular_values: list[np.array]
-    singular_vectors: list[np.array]
-    stds: list[np.array]
-    Sigmas_detoned: list[pd.DataFrame]
-    Sigmas_denoised: list[pd.DataFrame]
-    Sigmas_detoned_denoised: list[pd.DataFrame]
-    n_remaining_components_denoised: list[int]
-    n_remaining_components_detoned_denoised: list[int]
+    returns: list[pd.DataFrame]  # returns
+    Sigmas: list[pd.DataFrame]  # original correlation matrices
+    singular_values: list[np.array]  # singular values of correlation matrices
+    singular_vectors: list[np.array]  # singular vectors of correlation matrices
+    stds: list[np.array]  # standard deviations of returns
+    Sigmas_detoned: list[pd.DataFrame]  # detoned correlation matrices
+    Sigmas_denoised: list[pd.DataFrame]  # denoised correlation matrices
+    Sigmas_detoned_denoised: list[pd.DataFrame]  # detoned and denoised correlation matrices
+    n_remaining_components_denoised: list[int]  # number of remaining components after denoising
+    n_remaining_components_detoned_denoised: list[int]  # number of remaining components after detoning and denoising
 
     def __post_init__(self):
         assert len(self.Sigmas) == len(self.Sigmas_detoned) == len(self.Sigmas_denoised) == len(self.Sigmas_detoned_denoised) == len(self.n_remaining_components_denoised) == len(self.n_remaining_components_detoned_denoised)
@@ -203,11 +203,11 @@ def _hierarchical_clustering(distance_matrix, method="complete"):
     assert False, 'Unreachable'
 
 
-def _reconstruct_from_svd(U, S, VT):
+def _reconstruct_from_svd(U: np.ndarray, S: np.ndarray, VT: np.ndarray) -> np.ndarray:
     return U * S @ VT
 
 
-def _normalize_correlation_matrix(Sigma):
+def _normalize_correlation_matrix(Sigma: pd.DataFrame) -> pd.DataFrame:
     """
     Sigma = diag(Sigma)^{-1/2} * Sigma * diag(Sigma)^{-1/2}
     """

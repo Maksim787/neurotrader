@@ -187,8 +187,8 @@ def _load_or_compute(cache_folder: str, name: str, function: tp.Callable, use_ca
 @dataclass
 class Strategy:
     name: str
-    get_train_w: tp.Callable
-    get_test_w: tp.Callable
+    get_train_w: tp.Callable  # function to obtain train_w
+    get_test_w: tp.Callable  # function to obtain test_w
     train_w: pd.DataFrame = None
     test_w: pd.DataFrame = None
 

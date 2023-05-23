@@ -11,13 +11,13 @@ from .load import TRADING_DAYS_IN_YEAR
 
 
 class MarkowitzMethod(Enum):
-    # w^T Sigma w -> min_w s. t. w^T 1 = 1 and w^T mean_r = mu, w >= 0
+    # w^T Sigma w -> min_w s. t. w^T 1 = 1, w^T mean_r = mu, w >= 0
     # Params: mu_year_pct - float
     MinVarianceGivenMu = auto()
     # w^T Sigma w - q * returns^T w -> min_w s. t. w^T 1 = 1, w >= 0
     # Params: q - float
     MinVarianceMaxReturnGivenQ = auto()
-    # w^T Sigma w -> min_w s. t. w^T 1 = 1 and w^T mean_r = mu
+    # w^T Sigma w -> min_w s. t. w^T 1 = 1, w^T mean_r = mu
     # Params: mu_year_pct - float
     MinVarianceGivenMuMaybeNegative = auto()
 

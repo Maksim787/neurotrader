@@ -5,7 +5,6 @@ import seaborn as sns
 import os
 import datetime
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 
 from .utils import is_sorted
 

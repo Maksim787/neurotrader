@@ -59,7 +59,7 @@ def find_optimal_clusters_number(Sigma_train: pd.DataFrame, Sigma_test: pd.DataF
 
     # Iterate over number of clusters and compute scores
     for n_clusters in n_clusters_list:
-        results = get_clustering_results(dist_matrix_train, dist_matrix_test, n_clusters, model)
+        results = _get_clustering_results(dist_matrix_train, dist_matrix_test, n_clusters, model)
         scores_train.append(results.silhouette_train_score)
         scores_test.append(results.silhouette_test_score)
         clusters_labels.append(results.clusters_labels)
@@ -75,7 +75,7 @@ def find_optimal_clusters_number(Sigma_train: pd.DataFrame, Sigma_test: pd.DataF
     )
 
 
-def get_clustering_results(dist_matrix_train: pd.DataFrame, dist_matrix_test: pd.DataFrame, n_clusters: int, model: str) -> ClusteringResult:
+def _get_clustering_results(dist_matrix_train: pd.DataFrame, dist_matrix_test: pd.DataFrame, n_clusters: int, model: str) -> ClusteringResult:
     assert model in ['kmeans', 'spectral']
     if model == 'kmeans':
         model = KMeans(n_clusters=n_clusters)
