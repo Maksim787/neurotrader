@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.model_selection import GridSearchCV, train_test_split
 
+
 def fit_svm(features, y, MAX_SAMPLES=10000):
     nb_classes = np.unique(y, return_counts=True)[1].shape[0]
     train_size = features.shape[0]
@@ -49,6 +50,7 @@ def fit_svm(features, y, MAX_SAMPLES=10000):
         grid_search.fit(features, y)
         return grid_search.best_estimator_
 
+
 def fit_lr(features, y, MAX_SAMPLES=100000):
     # If the training set is too large, subsample MAX_SAMPLES examples
     if features.shape[0] > MAX_SAMPLES:
@@ -70,6 +72,7 @@ def fit_lr(features, y, MAX_SAMPLES=100000):
     pipe.fit(features, y)
     return pipe
 
+
 def fit_knn(features, y):
     pipe = make_pipeline(
         StandardScaler(),
@@ -77,6 +80,7 @@ def fit_knn(features, y):
     )
     pipe.fit(features, y)
     return pipe
+
 
 def fit_ridge(train_features, train_y, valid_features, valid_y, MAX_SAMPLES=100000):
     # If the training set is too large, subsample MAX_SAMPLES examples
